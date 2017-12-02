@@ -48,27 +48,13 @@ contract Pedersen {
     }
 }
 contract Auction {
-    enum VerificationStates {Init, Challenge, Verify, ValidWinner}
-    struct ZKPCommit {
-        uint cW1X;
-        uint cW1Y;
-        uint cW2X;
-        uint cW2Y;
-    }
-    struct ZKPResponse {
-        uint W1;
-        uint R1;
-        uint W2;
-        uint R2;
-        uint M;
-        uint N;
-        uint J;
-    }
+    enum VerificationStates {Init, Challenge,ChallengeDelta, Verify, VerifyDelta, ValidWinner}
     struct Bidder {
         uint commitX;
         uint commitY;
         bytes cipher;
-        bool validProof;
+        uint8 validProof;
+        uint8 validDelta;
         bool paidBack;
         bool existing;
     }
@@ -77,11 +63,11 @@ contract Auction {
     VerificationStates public states;
     address private challengedBidder;
     uint private challengeBlockNumber;
-    uint private K = 10;
+    bool private testing; //for fast testing without checking block intervals
+    uint8 private K = 10; //number of multiple rounds per ZKP 
     uint public V = 5472060717959818805561601436314318772174077789324455915672259473661306552145;
-    ZKPCommit[] public zkpCommits;
-    ZKPCommit[] public zkpDeltaCommits;
-    ZKPResponse public response;
+    //W1, R1, W2, R2 per one commit, the next half of the array is for delta commits
+    uint[4] public zkpCommits; 
     mapping(address => Bidder) public bidders;
     address[] public indexs;
     //Auction Parameters
@@ -93,10 +79,11 @@ contract Auction {
     uint    public fairnessFees;
     string  public auctioneerRSAPublicKey; 
     //these values are set when the auctioneer determines the winner
+    
     address public winner;
     uint public highestBid;    
     //Constructor = Setting all Parameters and auctioneerAddress as well
-    function Auction(uint _bidBlockNumber, uint _revealBlockNumber, uint _winnerPaymentBlockNumber, uint _maxBiddersCount, uint _fairnessFees, string _auctioneerRSAPublicKey, address pedersenAddress, uint k) public {
+    function Auction(uint _bidBlockNumber, uint _revealBlockNumber, uint _winnerPaymentBlockNumber, uint _maxBiddersCount, uint _fairnessFees, string _auctioneerRSAPublicKey, address pedersenAddress, uint8 k, bool _testing) public {
         auctioneerAddress = msg.sender;
         bidBlockNumber = block.number + _bidBlockNumber;
         revealBlockNumber = bidBlockNumber + _revealBlockNumber;
@@ -106,90 +93,88 @@ contract Auction {
         auctioneerRSAPublicKey = _auctioneerRSAPublicKey;  
         pedersen = Pedersen(pedersenAddress);
         K= k;
+        testing = _testing;
     }
     function Bid(uint cX, uint cY) public payable {
-        require(block.number < bidBlockNumber);   //during bidding Interval  
+        require(block.number < bidBlockNumber || testing);   //during bidding Interval  
         require(indexs.length < maxBiddersCount); //available slot    
         require(msg.value >= fairnessFees);  //paying fees
         require(bidders[msg.sender].existing == false);
-        bidders[msg.sender] = Bidder(cX, cY, "",false, false,true);
+        bidders[msg.sender] = Bidder(cX, cY, "",0,0, false,true);
         indexs.push(msg.sender);
     }
     function Reveal(bytes cipher) public {
-        require(block.number < revealBlockNumber && block.number > bidBlockNumber);
+        require(block.number < revealBlockNumber && block.number > bidBlockNumber || testing);
         require(bidders[msg.sender].existing ==true); //existing bidder
         bidders[msg.sender].cipher = cipher;
     }
     function ClaimWinner(address _winner, uint _bid, uint _r) public challengeByAuctioneer {
-        require(states == VerificationStates.Init);
+        require(states == VerificationStates.Init || testing);
         require(bidders[_winner].existing == true); //existing bidder
         require(_bid < V); //valid bid
         require(pedersen.Verify(_bid, _r, bidders[_winner].commitX, bidders[_winner].commitY)); //valid open of winner's commit        
         winner = _winner;
         highestBid = _bid;
-        bidders[winner].validProof = true;
         states = VerificationStates.Challenge;
     }
-    function ZKPChallenge(address y, uint[] commits, uint[] deltaCommits) public challengeByAuctioneer {
-        require(states == VerificationStates.Challenge);
+    function ZKPChallenge(address y, uint[4] commits, bool isDelta) public challengeByAuctioneer {
+        require(states == VerificationStates.Challenge || testing);
         require(bidders[y].existing == true); //existing bidder
         challengedBidder = y;
         challengeBlockNumber = block.number;
-        for(uint i=0; i< K; i++) {
-            zkpCommits.push(ZKPCommit(commits[4*i], commits[4*i+1], commits[4*i+2], commits[4*i+3]));
-            zkpDeltaCommits.push(ZKPCommit(deltaCommits[4*i], deltaCommits[4*i+1], deltaCommits[4*i+2], deltaCommits[4*i+3]));
-        }
+        for(uint i=0; i< commits.length; i++)
+            zkpCommits[i] = commits[i];
+        if(isDelta)
+            states = VerificationStates.VerifyDelta;
+        else
+            states = VerificationStates.Verify;
     }
     
-    function ZKPVerify(uint[] responses, uint[] deltaResponses) public challengeByAuctioneer {
-        uint hash = uint(block.blockhash(challengeBlockNumber));
-        uint mask = 1;
-        //Verify Bids ZKP
-        for(uint i = 0; i<K; i++) {
-            response = ZKPResponse(responses[i*7],responses[i*7+1],responses[i*7+2],responses[i*7+3],responses[i*7+4],responses[i*7+5], responses[i*7+6] );
-            if((hash & mask<<i) == 0) 
-                VerifyCase1(false,i);
-            else 
-                VerifyCase2(false, bidders[challengedBidder].commitX, bidders[challengedBidder].commitY, i);
+    function ZKPVerify1(uint[4] response, bool isDelta) public challengeByAuctioneer {
+        require(states == VerificationStates.Verify || states == VerificationStates.VerifyDelta);
+        require(block.blockhash(challengeBlockNumber)[0] == 0);
+        require(response[0] - response[2] == V);
+        require(pedersen.Verify(response[0], response[1], zkpCommits[0], zkpCommits[1]));
+        require(pedersen.Verify(response[2], response[3], zkpCommits[2], zkpCommits[3]));
+        if(isDelta)
+            bidders[challengedBidder].validDelta ++;
+        else
+            bidders[challengedBidder].validProof ++;
+        states = VerificationStates.Challenge;
+    }
+    function ZKPVerify2(uint[2] response, uint8 j, bool isDelta) public challengeByAuctioneer {
+        require(states == VerificationStates.Verify || states == VerificationStates.VerifyDelta);
+        require(block.blockhash(challengeBlockNumber)[0] == 0);
+        uint cX; uint cY;
+        if( isDelta) {
+                (cX, cY) = pedersen.CommitDelta(bidders[winner].commitX, bidders[winner].commitY, bidders[challengedBidder].commitX, bidders[challengedBidder].commitY);
+            if(j==1) 
+                (cX, cY) = pedersen.ecAdd(cX,cY, zkpCommits[0], zkpCommits[1]);
+            else
+                (cX, cY) = pedersen.ecAdd(cX,cY, zkpCommits[2], zkpCommits[3]);
+        } else {
+            if(j ==1) 
+                (cX, cY) = pedersen.ecAdd(bidders[challengedBidder].commitX, bidders[challengedBidder].commitY, zkpCommits[0], zkpCommits[1]);
+            else
+                (cX, cY) = pedersen.ecAdd(bidders[challengedBidder].commitX, bidders[challengedBidder].commitY, zkpCommits[2], zkpCommits[3]);
         }
-        //Verify Delta ZKP
-        for(i = 0; i<K; i++) {
-            response = ZKPResponse(deltaResponses[i*7],deltaResponses[i*7+1],deltaResponses[i*7+2],deltaResponses[i*7+3],deltaResponses[i*7+4],deltaResponses[i*7+5], deltaResponses[i*7+6] );
-            if((hash & mask<<(i+K)) == 0) 
-                require(VerifyCase1(true, i));
-            else {
-                var (cX, cY) = pedersen.CommitDelta(bidders[winner].commitX, bidders[winner].commitY, bidders[challengedBidder].commitX, bidders[challengedBidder].commitY);
-                require(VerifyCase2(true, cX, cY, i));
-            }
-        }
-        bidders[challengedBidder].validProof = true;
+        require(pedersen.Verify(response[0], response[1], cX, cY));
+        if(isDelta)
+            bidders[challengedBidder].validDelta ++;
+        else
+            bidders[challengedBidder].validProof ++;
+        states = VerificationStates.Challenge;
     }
     function VerifyAll() public challengeByAuctioneer {
         for (uint i = 0; i<indexs.length; i++) 
-            require(bidders[indexs[i]].validProof);
+                if(indexs[i] != winner) {
+                    require(bidders[indexs[i]].validProof == K);
+                    require(bidders[indexs[i]].validDelta == K);
+                }
         states = VerificationStates.ValidWinner;
     }
-    function VerifyCase1(bool delta, uint i) private returns (bool){
-        require(V == response.W1 - response.W2);
-        ZKPCommit storage commit = zkpCommits[i];
-        if(delta)
-            commit = zkpDeltaCommits[i];
-        require(pedersen.Verify(response.W1, response.R1, commit.cW1X, commit.cW1Y));
-        require(pedersen.Verify(response.W2, response.R2, commit.cW2X, commit.cW2Y));
-        return true;
-    }
-    function VerifyCase2(bool delta, uint cX, uint cY, uint i) private returns (bool){
-        ZKPCommit storage commit= zkpCommits[i];
-        if(delta)
-            commit = zkpDeltaCommits[i];
-        var (cXW1, cXW2) = pedersen.ecAdd(cX, cY, commit.cW1X, commit.cW1Y);
-        if(response.J == 2) 
-            (cXW1, cXW2) = pedersen.ecAdd(cX, cY, commit.cW2X, commit.cW2Y);
-        require(pedersen.Verify(response.M, response.N, cXW1, cXW2));
-        return true;
-    }
     function Withdraw() public {
-        require(states == VerificationStates.ValidWinner || block.number>winnerPaymentBlockNumber);
+        require(states == VerificationStates.ValidWinner || block.number>winnerPaymentBlockNumber || testing);
         require(msg.sender != winner);
         require(bidders[msg.sender].paidBack == false && bidders[msg.sender].existing == true);
         require(withdrawLock == false);
@@ -199,7 +184,7 @@ contract Auction {
         withdrawLock = false;
     }
     function WinnerPay() public payable {
-        require(states == VerificationStates.ValidWinner);
+        require(states == VerificationStates.ValidWinner || testing);
         require(msg.sender == winner);
         require(msg.value >= highestBid - fairnessFees);
     }
@@ -208,7 +193,7 @@ contract Auction {
     }
     modifier challengeByAuctioneer() {
         require(msg.sender == auctioneerAddress); //by auctioneer only
-        //require(block.number > revealBlockNumber && block.number < winnerPaymentBlockNumber); //after reveal and before winner payment
+        require(block.number > revealBlockNumber && block.number < winnerPaymentBlockNumber || testing); //after reveal and before winner payment
         _;
     }
 }

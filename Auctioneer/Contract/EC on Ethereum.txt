@@ -1,0 +1,100 @@
+﻿pragma solidity ^0.4.18;
+contract EC {
+    bytes public g;
+    bytes public h;
+    bytes public p;
+    bytes public q;
+    uint public qq;
+    function EC() public {
+        g = hex"2bd3e6d0f3b142924f5ca7b49ce5b9d54c4703d7ae5648e61d02268b1a0a9fb721611ce0a6af85915e2f1d70300909ce2e49dfad4a4619c8390cae66cefdb204";
+        h = hex"070a8d6a982153cae4be29d434e8faef8a47b274a053f5a4ee2a6c9c13c31e5c031b8ce914eba3a9ffb989f9cdd5b0f01943074bf4f0f315690ec3cec6981afc";
+        p = hex"30644E72E131A029B85045B68181585D97816A916871CA8D3C208C16D87CFD47";
+        q = hex"30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001";
+        qq = convertBytesToUint(q);
+    }
+    function test() public returns (bool, bytes , bytes, bytes) {
+        bytes memory c1 = commit(5, 4);
+        bytes memory c2 = commit(3, 6);
+        //bytes memory c3 = commit(8, 10);
+        bytes memory c5 =ecNeg( commit (2, 2));
+        bytes memory c6 = commit(2, qq-2);
+        bytes memory c1_2 = commitDifference(c1, c2);
+        //bytes memory c12 = ecAdd(c1, c2);
+       // bytes memory c3_1 = commitDifference(c3, c1);
+        //return isEqual(c3, c12) && isEqual(c3_1, c2);
+        return (isEqual(c5, c1_2), c5, c1_2, c6);
+    }
+
+    
+    function commit(uint x, uint r) public returns (bytes) {
+        return ecAdd(ecMul(g, x), ecMul(h, r));
+    }
+    function verify(uint x, uint r, bytes c) public returns (bool) {
+        return isEqual(c, commit(x, r));       
+    }
+    function commitDifference(bytes x, bytes y) public returns (bytes) {
+        return ecAdd(x, ecNeg(y));
+    }
+    
+    
+    function ecNeg(bytes input) private returns (bytes) {
+        bytes memory output =new bytes(64);
+        bytes memory y = new bytes(32);
+        assembly{
+            mstore(add(y, 32), mload(add(input,64)))
+        }
+        uint yy = convertBytesToUint(y);
+        uint pp = convertBytesToUint(p);
+        uint rr = pp - yy;
+        assembly{
+            mstore(add(output, 32), mload(add(input, 32)))
+            mstore(add(output, 64), rr)
+        }
+        return output;
+    }
+    function ecMul(bytes x, uint y) private returns (bytes) {
+        bool success = false;
+        bytes memory input = new bytes(96);
+        bytes memory output = new bytes(64);
+        assembly {
+            mstore(add(input, 32), mload(add(x, 32)))
+            mstore(add(input, 64), mload(add(x, 64)))
+            mstore(add(input, 96), y)
+            success := call(gas(), 7, 0, add(input, 32), 96, add(output, 32), 64)
+        }
+        require(success);
+        return output;
+
+    }
+    function ecAdd(bytes x, bytes y) public returns (bytes) {
+        bool success = false;
+        bytes memory input = new bytes(128);
+        bytes memory output = new bytes(64);
+        assembly {
+            mstore(add(input, 32), mload(add(x, 32)))
+            mstore(add(input, 64), mload(add(x, 64)))
+            mstore(add(input, 96), mload(add(y, 32)))
+            mstore(add(input, 128), mload(add(y, 64)))
+            success := call(gas(), 6, 0, add(input, 32), 128, add(output, 32), 64)
+        }
+        require(success);
+        return output;
+    }
+    function convertBytesToUint(bytes x) private returns (uint) {
+        uint r;
+        assembly{
+            r :=mload(add(x,32))
+        }
+        return r;
+    }
+    function isEqual(bytes x, bytes y) private pure returns (bool) {
+        require(x.length == y.length);
+        for (uint i = 0; i<x.length; i++) {
+            if (x[i] != y[i]) {
+                return false;
+            }
+        }
+        return true;
+
+    }
+}

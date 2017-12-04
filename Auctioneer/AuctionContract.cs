@@ -1,4 +1,4 @@
-﻿using Nethereum.Contracts;
+using Nethereum.Contracts;
 using Nethereum.Hex.HexTypes;
 using Nethereum.RPC.Eth.DTOs;
 using Nethereum.Web3;
@@ -178,7 +178,7 @@ namespace Auctioneer
             }
             var x = bidders[winnerIndex];
             await web3.Personal.UnlockAccount.SendRequestAsync(Accounts[0], "123", 120);
-            var receipt = await ClaimWinner.SendTransactionAndWaitForReceiptAsync(Accounts[0], new HexBigInteger(30000000000), null, null, null, x.Address, x.Bid, x.Random);
+            var receipt = await ClaimWinner.SendTransactionAndWaitForReceiptAsync(Accounts[0], new HexBigInteger(10000000000), new HexBigInteger(20), null, null, x.Address, x.Bid, x.Random);
             Debug.Assert(receipt.Status.Value == 1);
             Console.WriteLine(string.Format("\nClaimWinner Bidder = {0}\nBid = {1}\nGas = {2}\n", x.Address, x.Bid, receipt.GasUsed.Value));
         }
@@ -215,7 +215,7 @@ namespace Auctioneer
             List<BigInteger> deltaResponses = new List<BigInteger>();
             GenerateChallenges(out commits, out opens);
             GenerateChallenges(out deltaCommits, out deltaOpens);
-            var receipt = await ZKPCommit.SendTransactionAndWaitForReceiptAsync(Accounts[0], new HexBigInteger(30000000000), null, null, null, x.Address, commits, deltaCommits);
+            var receipt = await ZKPCommit.SendTransactionAndWaitForReceiptAsync(Accounts[0], new HexBigInteger(10000000000), new HexBigInteger(20), null, null, x.Address, commits, deltaCommits);
             Debug.Assert(receipt.Status.Value == 1);
             Console.WriteLine("ZKPCommit Bidder = " + x.Address + "\nGas = " + receipt.GasUsed.Value);
 
@@ -268,13 +268,13 @@ namespace Auctioneer
                 mask = mask << 1;
             }
             await web3.Personal.UnlockAccount.SendRequestAsync(Accounts[0], "123", 120);
-            receipt = await ZKPVerify.SendTransactionAndWaitForReceiptAsync(Accounts[0], new HexBigInteger(30000000000), null, null, null, responses, deltaResponses);
+            receipt = await ZKPVerify.SendTransactionAndWaitForReceiptAsync(Accounts[0], new HexBigInteger(10000000000), new HexBigInteger(20), null, null, responses, deltaResponses);
             Console.WriteLine("ZKPVerify succeeded with Gas = " + receipt.GasUsed.Value+"\tStatus = "+receipt.Status.Value+"\n");
         }     
         private async Task StartVerifyAll()
         {
             await web3.Personal.UnlockAccount.SendRequestAsync(Accounts[0], "123", 120);
-            var receipt = await VerifyAll.SendTransactionAndWaitForReceiptAsync(Accounts[0], new HexBigInteger(30000000000), null, null);
+            var receipt = await VerifyAll.SendTransactionAndWaitForReceiptAsync(Accounts[0], new HexBigInteger(10000000000), new HexBigInteger(20), null);
             Console.WriteLine(string.Format("VerifyAll succeeded\nGas = {0}\tStatus = {1}\n", receipt.GasUsed.Value, receipt.Status.Value));
             fail = receipt.Status.Value == 0;
         }
@@ -285,7 +285,7 @@ namespace Auctioneer
                 if (i == winnerIndex && !fail)
                     continue;
                 await web3.Personal.UnlockAccount.SendRequestAsync(bidders[i].Address, "123", 120);
-                var receipt = await Withdraw.SendTransactionAndWaitForReceiptAsync(bidders[i].Address, new HexBigInteger(30000000000),new HexBigInteger(20),null,null,null);
+                var receipt = await Withdraw.SendTransactionAndWaitForReceiptAsync(bidders[i].Address, new HexBigInteger(10000000000),new HexBigInteger(20),null,null,null);
                 Console.WriteLine(string.Format("Refunding Bidder = {0}\nGas = {1}", bidders[i].Address, receipt.GasUsed.Value), false);
             }
         }

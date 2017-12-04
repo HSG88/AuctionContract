@@ -195,7 +195,11 @@ contract Auction {
     function VerifyAll() public challengeByAuctioneer {
         for (uint i = 0; i<indexs.length; i++) 
                 if(indexs[i] != winner)
-                    require(bidders[indexs[i]].validProofs);
+                    if(!bidders[indexs[i]].validProofs) {
+                        winner = 0;
+                        revert();
+                    }
+                        
         states = VerificationStates.ValidWinner;
     }
     function Withdraw() public {

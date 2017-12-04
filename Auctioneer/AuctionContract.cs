@@ -16,6 +16,7 @@ namespace Auctioneer
 {
     class AuctionContract
     {
+        bool fail;
         RandomNumberGenerator RNG;
         BigInteger Q = BigInteger.Parse("21888242871839275222246405745257275088696311157297823662689037894645226208583");
         BigInteger maxBid;        
@@ -188,8 +189,7 @@ namespace Auctioneer
                 if (i == winnerIndex)
                     continue;
                 await Challenge(bidders[i]);
-            }
-           Console.WriteLine("All verifications are completed successfully");
+            }           
         }
         private  void GenerateChallenges(out List<BigInteger> commits, out List<BigInteger> opens)
         {
@@ -249,13 +249,16 @@ namespace Auctioneer
                 }
                 else
                 {
-                    var m = deltaOpens[j] + bidders[winnerIndex].Bid - x.Bid;
+                    var diff = bidders[winnerIndex].Bid - x.Bid;
+                    if (diff < 0)
+                        diff += Q;
+                    var m = deltaOpens[j] + diff;// bidders[winnerIndex].Bid - x.Bid;
                     var n = deltaOpens[j+ 1] + bidders[winnerIndex].Random - x.Random;
                     var z = 1;
                     if (m > maxBid || m < 0)
                     {
                         z = 2;
-                        m = deltaOpens[j + 2] + bidders[winnerIndex].Bid - x.Bid;
+                        m = deltaOpens[j + 2] + diff;// bidders[winnerIndex].Bid - x.Bid;
                         n = deltaOpens[j + 3] + bidders[winnerIndex].Random - x.Random;
                     }
                     if (n < 0)
@@ -266,19 +269,20 @@ namespace Auctioneer
             }
             await web3.Personal.UnlockAccount.SendRequestAsync(Accounts[0], "123", 120);
             receipt = await ZKPVerify.SendTransactionAndWaitForReceiptAsync(Accounts[0], new HexBigInteger(30000000000), null, null, null, responses, deltaResponses);
-            Console.WriteLine("ZKPVerify succeeded with Gas = " + receipt.GasUsed.Value+"\tStatus = "+receipt.Status.Value);
+            Console.WriteLine("ZKPVerify succeeded with Gas = " + receipt.GasUsed.Value+"\tStatus = "+receipt.Status.Value+"\n");
         }     
         private async Task StartVerifyAll()
         {
             await web3.Personal.UnlockAccount.SendRequestAsync(Accounts[0], "123", 120);
             var receipt = await VerifyAll.SendTransactionAndWaitForReceiptAsync(Accounts[0], new HexBigInteger(30000000000), null, null);
             Console.WriteLine(string.Format("VerifyAll succeeded\nGas = {0}\tStatus = {1}\n", receipt.GasUsed.Value, receipt.Status.Value));
+            fail = receipt.Status.Value == 0;
         }
         private async Task RefundHonest()
         {
             for (int i=0; i< bidders.Count; i++)
             {
-                if (i == winnerIndex)
+                if (i == winnerIndex && !fail)
                     continue;
                 await web3.Personal.UnlockAccount.SendRequestAsync(bidders[i].Address, "123", 120);
                 var receipt = await Withdraw.SendTransactionAndWaitForReceiptAsync(bidders[i].Address, new HexBigInteger(30000000000),new HexBigInteger(20),null,null,null);

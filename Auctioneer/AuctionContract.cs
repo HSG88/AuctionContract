@@ -21,19 +21,26 @@ namespace Auctioneer
         BigInteger maxBid;        
         public string[] Accounts { get; private set; }//0= auctioneer, then bidder1, bidder2, bidder3
         List<Bidder> bidders;
-        int bidFees = 1, bidding = 10, reveal = 10, payment = 100, count = 10, winnerIndex, K=10;
+        int bidFees, biddingInterval, revealInterval, verificationInterval, winnerIndex, K;
         bool testing = true;
         Contract auctionContract, pedersenContract;
         Web3 web3;
         RSACryptoServiceProvider rsa = new RSACryptoServiceProvider();
         Function Bid, Reveal, ClaimWinner, ZKPCommit, ZKPVerify, VerifyAll, WinnerPay, Withdraw, Commit, Verify, BiddersMap;
-        public AuctionContract()
+        public AuctionContract(int bidFees, int biddingInterval, int revealInterval, int verificationInterval, int k, bool testing)
         {
+            this.bidFees = bidFees;
+            this.biddingInterval = biddingInterval;
+            this.revealInterval = revealInterval;
+            this.verificationInterval = verificationInterval;
+            K = k;
+            this.testing = testing;
             RNG = RandomNumberGenerator.Create();
             maxBid = Q / 4;
             web3 = new Web3("http://127.0.0.1:8545/");
             bidders = new List<Bidder>();
         }
+
         private async Task DeployPedersenContract()
         {
             var abi = File.ReadAllText("Contract\\abiPedersen.txt");
@@ -50,8 +57,7 @@ namespace Auctioneer
         {
             var abi = File.ReadAllText("Contract\\abiAuction.txt");
             var bin = File.ReadAllText("Contract\\binAuction.txt");
-            count = Accounts.Length - 1;
-            object[] parameters = new object[] { new BigInteger(bidding), new BigInteger(reveal), new BigInteger(payment), new BigInteger(count), bidFees * BigInteger.Parse("1000000000000000000"), rsa.ToXmlString(false), pedersenContract.Address, K, testing };
+            object[] parameters = new object[] { new BigInteger(biddingInterval), new BigInteger(revealInterval), new BigInteger(verificationInterval), new BigInteger(Accounts.Length-1), bidFees * BigInteger.Parse("1000000000000000000"), rsa.ToXmlString(false), pedersenContract.Address, K, testing };
             TransactionReceipt receipt = await web3.Eth.DeployContract.SendRequestAndWaitForReceiptAsync(abi, bin, Accounts[0], new HexBigInteger(300000000), null, new HexBigInteger(bidFees * BigInteger.Parse("1000000000000000000")), null, parameters);
             auctionContract = web3.Eth.GetContract(abi, receipt.ContractAddress);
             Bid = auctionContract.GetFunction(nameof(Bid));
@@ -66,9 +72,9 @@ namespace Auctioneer
             Console.WriteLine("Deployed Auction contract, Gas = " + receipt.GasUsed.Value+"\nAddress = "+auctionContract.Address);
             if (testing)
                 return;
-            var b = receipt.BlockNumber.Value + bidding;
-            var r = b + reveal;
-            var p = r + payment;
+            var b = receipt.BlockNumber.Value + biddingInterval;
+            var r = b + revealInterval;
+            var p = r + verificationInterval;
             Console.WriteLine(string.Format("Bidding ends at block {0}\r\nRevealing ends at block {1}\r\nPayment ends at block {2}", b, r, p));
         }
         public async Task Test()

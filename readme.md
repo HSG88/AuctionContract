@@ -24,8 +24,8 @@ miner.stop()
 ```
 3.Repeat the above commands but with different indexs 1, 2, ...
 
- ### Testing the contracts
- 1. Build the C# project using Visual Studio 2017
+ ### Testing the Auction
+ 1. Build the Auctioneer C# project using Visual Studio 2017
  2. Start the miner on geth console
  3. Run the application and it will report a sequence of transactions starting from the deployment to finalizing the auction.
  4. Inside, the Program.cs file you can find a list of auction parameters and their description. You can change them and rebuild the application to test the new effects.

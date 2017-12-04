@@ -13,11 +13,3 @@ miner.setEtherbase(eth.accounts[0])
 miner.start(4)
 zzz
 miner.stop()
-
-admin.startRPC("0.0.0.0", 8545, "*")
-
-or you can use this simulatenously mining
-geth --datadir node --networkid 300 console --mine --minerthreads=3 --etherbase=0xb30fa83a7e55386cec23146b3d50ba5e72457dee
-geth --datadir node --networkid 300 console --mine --minerthreads=3 --etherbase=0x88ad7e87203da96cd81cae13fa001534600de59c
-geth --datadir node --networkid 300 console --mine --minerthreads=3 --etherbase=0x1fdd17b0b23178c5db56e205ea47d56ad58f4255
-geth --datadir node --networkid 300 console --mine --minerthreads=3 --etherbase=0x8e36645d6639e8f54b7861447a411ed843995a71

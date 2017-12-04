@@ -28,9 +28,4 @@ miner.stop()
  1. Build the C# project using Visual Studio 2017
  2. Start the miner on geth console
  3. Run the application and it will report a sequence of transactions starting from the deployment to finalizing the auction.
- 4. Happy testing.
-
-### Modifying the contracts
- 1. Edit the contracts on [Remix](https://ethereum.github.io/browser-solidity)
- 2. Click on details and copy ABI and BIN to the associated files under Contracts subdirectory
- 3. Build the code and run it to test the new changes.
+ 4. Inside, the Program.cs file you can find a list of auction parameters and their description. You can change them and rebuild the application to test the new effects.

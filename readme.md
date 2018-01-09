@@ -1,6 +1,6 @@
 # Verifiable Sealed-bid Auction on Ethereum Blockchain
 
-This is the accompanying code for the article "Verifiable Sealed-bid Auction on Ethereum Blockchain". It consists of:
+This is the accompanying code for the article "Verifiable Sealed-bid Auction on Ethereum Blockchain" to be published at Trusted Smart Contracts workshop 2018. It consists of:
 
  * Two Solidity contracts: Auction and Pedersen
  * C# Console application for interaction with these contracts
